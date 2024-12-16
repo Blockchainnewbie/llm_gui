@@ -37,6 +37,7 @@ Handles integration with the Aider framework, including:
 - Console output capture
 - Git operations
 - Error handling
+- CMD.exe process management
 
 Key classes:
 - `AiderManager`: Main integration class
@@ -50,6 +51,7 @@ tkinter
 aider-chat
 anthropic
 python-dotenv
+subprocess
 ```
 
 ## Environment Setup
@@ -59,7 +61,12 @@ python-dotenv
    ANTHROPIC_API_KEY=your_api_key_here
    ```
 
-2. Git Repository Setup:
+2. System Requirements:
+   - Windows OS (for cmd.exe integration)
+   - Git installed and configured
+   - Python 3.8 or higher
+
+3. Git Repository Setup:
    - Initialize git repository
    - Set up .gitignore for Python
    - Configure git user and email
@@ -85,10 +92,12 @@ python-dotenv
 
 ### Aider Integration
 
-1. Console Capture:
+1. Console Management:
+   - Start cmd.exe in new window
    - Capture all Aider output
    - Store in memory
    - Display in GUI
+   - Cleanup on exit
 
 2. Code Editing:
    - File validation
@@ -118,16 +127,16 @@ python-dotenv
 
 1. Console Issues:
    ```python
-   # Handle missing console in GUI mode
-   class CaptureConsole:
-       def __init__(self):
-           self.output = []
-           self.last_output = ""
+   # Start cmd.exe in a new window
+   self.cmd_process = subprocess.Popen(
+       ['cmd.exe'],
+       creationflags=subprocess.CREATE_NEW_CONSOLE
+   )
 
-       def print(self, *args, sep=' ', end='\n', **kwargs):
-           output_text = sep.join(str(arg) for arg in args) + end
-           self.output.append(output_text)
-           self.last_output = output_text
+   # Handle cleanup
+   def __del__(self):
+       if hasattr(self, 'cmd_process') and self.cmd_process:
+           self.cmd_process.terminate()
    ```
 
 2. Git Integration:

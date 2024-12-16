@@ -30,6 +30,7 @@ class AiderManager:
         self.main_model = None
         self.weak_model = None
         self.active_provider = None
+        self.cmd_process = None
         
         # Try to set an API key from available providers
         self.set_api_key_from_registry()
@@ -106,6 +107,16 @@ class AiderManager:
             if not os.environ.get('ANTHROPIC_API_KEY'):
                 raise RuntimeError("ANTHROPIC_API_KEY not found in environment variables")
 
+            # Start cmd.exe process
+            try:
+                self.cmd_process = subprocess.Popen(
+                    ['cmd.exe'],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
+            except Exception as e:
+                print(f"Warning: Could not start cmd.exe: {e}")
+                self.cmd_process = None
+
             # Create a console that captures output
             class CaptureConsole:
                 def __init__(self):
@@ -168,6 +179,15 @@ class AiderManager:
             if "ANTHROPIC_API_KEY not found" in str(e):
                 raise
             raise RuntimeError(f"Failed to initialize Aider: {str(e)}")
+    
+    def __del__(self):
+        """Cleanup when the object is destroyed"""
+        try:
+            # Terminate cmd.exe process if it exists
+            if hasattr(self, 'cmd_process') and self.cmd_process:
+                self.cmd_process.terminate()
+        except Exception:
+            pass  # Ignore cleanup errors
     
     def get_console_output(self):
         """Get all captured console output"""
