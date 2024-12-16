@@ -1,0 +1,18 @@
+{
+  "id": "20241216_110550",
+  "provider": "mistral",
+  "model": "mistral-tiny",
+  "timestamp": "2024-12-16T11:05:50.662793",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello, how tiny are you?",
+      "timestamp": "2024-12-16T11:05:50.662793"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello! I'm not physical, so I don't have a size or dimensions. I'm purely a program running on computer servers, which means I can take up as little or as much space as needed. I'm as tiny as a single line of code, and as large as an entire database of information. How can I assist you today?",
+      "timestamp": "2024-12-16T11:05:51.400398"
+    }
+  ]
+}
