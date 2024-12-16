@@ -127,26 +127,55 @@ subprocess
 
 1. Console Issues:
    ```python
-   # Start cmd.exe in a new window
+   # Start cmd.exe with proper environment
+   startupinfo = subprocess.STARTUPINFO()
+   startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+   
    self.cmd_process = subprocess.Popen(
-       ['cmd.exe'],
-       creationflags=subprocess.CREATE_NEW_CONSOLE
+       ['cmd.exe', '/k', 'echo Aider Console Ready && set PYTHONIOENCODING=utf-8'],
+       creationflags=subprocess.CREATE_NEW_CONSOLE,
+       startupinfo=startupinfo,
+       env=dict(os.environ, PYTHONIOENCODING='utf-8', PROMPT_TOOLKIT_NO_CPR='1')
    )
+   
+   # Attach to the console
+   import ctypes
+   kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+   kernel32.AttachConsole(self.cmd_process.pid)
 
    # Handle cleanup
    def __del__(self):
-       if hasattr(self, 'cmd_process') and self.cmd_process:
+       # Detach from console
+       kernel32.FreeConsole()
+       # Terminate process
+       if self.cmd_process:
            self.cmd_process.terminate()
    ```
 
-2. Git Integration:
+2. Console Output:
+   ```python
+   class CaptureConsole:
+       def __init__(self, cmd_process):
+           self.output = []
+           self.cmd_process = cmd_process
+
+       def print(self, *args, sep=' ', end='\n', **kwargs):
+           output_text = sep.join(str(arg) for arg in args) + end
+           self.output.append(output_text)
+           # Write to cmd.exe
+           if self.cmd_process and self.cmd_process.poll() is None:
+               subprocess.run(['cmd.exe', '/c', 'echo ' + output_text.rstrip()],
+                           creationflags=subprocess.CREATE_NO_WINDOW)
+   ```
+
+3. Git Integration:
    ```python
    # Skip problematic files
    if any(skip in abs_path.lower() for skip in ['.git', '.env', 'venv', '__pycache__']):
        continue
    ```
 
-3. API Key Handling:
+4. API Key Handling:
    ```python
    if not os.environ.get('ANTHROPIC_API_KEY'):
        raise RuntimeError("ANTHROPIC_API_KEY not found in environment variables")

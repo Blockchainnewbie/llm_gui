@@ -107,21 +107,38 @@ class AiderManager:
             if not os.environ.get('ANTHROPIC_API_KEY'):
                 raise RuntimeError("ANTHROPIC_API_KEY not found in environment variables")
 
-            # Start cmd.exe process
+            # Start cmd.exe process with specific environment
             try:
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                
+                # Create a new cmd.exe process and wait for it to be ready
                 self.cmd_process = subprocess.Popen(
-                    ['cmd.exe'],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                    ['cmd.exe', '/k', 'echo Aider Console Ready && set PYTHONIOENCODING=utf-8'],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    startupinfo=startupinfo,
+                    env=dict(os.environ, PYTHONIOENCODING='utf-8', PROMPT_TOOLKIT_NO_CPR='1')
                 )
+                
+                # Give the console time to initialize
+                import time
+                time.sleep(1)
+                
+                # Attach to the console
+                import ctypes
+                kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+                kernel32.AttachConsole(self.cmd_process.pid)
+                
             except Exception as e:
                 print(f"Warning: Could not start cmd.exe: {e}")
                 self.cmd_process = None
 
             # Create a console that captures output
             class CaptureConsole:
-                def __init__(self):
+                def __init__(self, cmd_process):
                     self.output = []
                     self.last_output = ""
+                    self.cmd_process = cmd_process
 
                 def print(self, *args, sep=' ', end='\n', **kwargs):
                     # Combine the arguments into a single string
@@ -129,6 +146,13 @@ class AiderManager:
                     # Store in both the full history and last output
                     self.output.append(output_text)
                     self.last_output = output_text
+                    # Also write to cmd.exe if available
+                    if self.cmd_process and self.cmd_process.poll() is None:
+                        try:
+                            subprocess.run(['cmd.exe', '/c', 'echo ' + output_text.rstrip()],
+                                        creationflags=subprocess.CREATE_NO_WINDOW)
+                        except Exception:
+                            pass
                 
                 def input(self, *args, **kwargs):
                     if args:  # If there's a prompt, capture it too
@@ -147,6 +171,13 @@ class AiderManager:
                     """Clear the captured output"""
                     self.output = []
                     self.last_output = ""
+                    # Clear cmd.exe screen if available
+                    if self.cmd_process and self.cmd_process.poll() is None:
+                        try:
+                            subprocess.run(['cmd.exe', '/c', 'cls'],
+                                        creationflags=subprocess.CREATE_NO_WINDOW)
+                        except Exception:
+                            pass
 
             # Create InputOutput instance with minimal parameters
             self.io = InputOutput(
@@ -156,7 +187,7 @@ class AiderManager:
             )
             
             # Replace the console with our capturing version
-            self.io.console = CaptureConsole()
+            self.io.console = CaptureConsole(self.cmd_process)
             
             # Initialize coder with Anthropic model
             model_instance = Model(main_model or 'claude-3-opus-20240229')
@@ -183,6 +214,11 @@ class AiderManager:
     def __del__(self):
         """Cleanup when the object is destroyed"""
         try:
+            # Detach from console if we were attached
+            import ctypes
+            kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel32.FreeConsole()
+            
             # Terminate cmd.exe process if it exists
             if hasattr(self, 'cmd_process') and self.cmd_process:
                 self.cmd_process.terminate()
