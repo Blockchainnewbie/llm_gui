@@ -109,28 +109,45 @@ class AiderManager:
 
             # Start cmd.exe process with specific environment
             try:
+                # First detach from any existing console
+                import ctypes
+                kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+                kernel32.FreeConsole()
+                
+                # Start a new cmd.exe process
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 
-                # Create a new cmd.exe process and wait for it to be ready
+                # Create environment with necessary variables
+                env = dict(os.environ)
+                env['PYTHONIOENCODING'] = 'utf-8'
+                env['PROMPT_TOOLKIT_NO_CPR'] = '1'
+                
+                # Create a new cmd.exe process
                 self.cmd_process = subprocess.Popen(
-                    ['cmd.exe', '/k', 'echo Aider Console Ready && set PYTHONIOENCODING=utf-8'],
+                    ['cmd.exe'],
                     creationflags=subprocess.CREATE_NEW_CONSOLE,
                     startupinfo=startupinfo,
-                    env=dict(os.environ, PYTHONIOENCODING='utf-8', PROMPT_TOOLKIT_NO_CPR='1')
+                    env=env
                 )
                 
                 # Give the console time to initialize
                 import time
-                time.sleep(1)
+                time.sleep(0.5)
                 
-                # Attach to the console
-                import ctypes
-                kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
-                kernel32.AttachConsole(self.cmd_process.pid)
+                # Try to attach to the new console
+                if kernel32.AttachConsole(self.cmd_process.pid):
+                    # Redirect stdout and stderr
+                    import sys
+                    sys.stdout = open('CONOUT$', 'w')
+                    sys.stderr = open('CONOUT$', 'w')
+                    
+                    # Write welcome message
+                    print("\nAider Console Ready\n")
+                    sys.stdout.flush()
                 
             except Exception as e:
-                print(f"Warning: Could not start cmd.exe: {e}")
+                print(f"Warning: Could not initialize console: {e}")
                 self.cmd_process = None
 
             # Create a console that captures output
@@ -149,8 +166,8 @@ class AiderManager:
                     # Also write to cmd.exe if available
                     if self.cmd_process and self.cmd_process.poll() is None:
                         try:
-                            subprocess.run(['cmd.exe', '/c', 'echo ' + output_text.rstrip()],
-                                        creationflags=subprocess.CREATE_NO_WINDOW)
+                            print(output_text.rstrip())
+                            sys.stdout.flush()
                         except Exception:
                             pass
                 
@@ -174,8 +191,7 @@ class AiderManager:
                     # Clear cmd.exe screen if available
                     if self.cmd_process and self.cmd_process.poll() is None:
                         try:
-                            subprocess.run(['cmd.exe', '/c', 'cls'],
-                                        creationflags=subprocess.CREATE_NO_WINDOW)
+                            os.system('cls')
                         except Exception:
                             pass
 
@@ -214,6 +230,13 @@ class AiderManager:
     def __del__(self):
         """Cleanup when the object is destroyed"""
         try:
+            # Clean up stdout/stderr if we redirected them
+            import sys
+            if hasattr(sys.stdout, 'close'):
+                sys.stdout.close()
+            if hasattr(sys.stderr, 'close'):
+                sys.stderr.close()
+            
             # Detach from console if we were attached
             import ctypes
             kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
@@ -320,7 +343,7 @@ Please make the changes needed while following these guidelines:
                 raise  # Re-raise if it's not a git error
             
             # Get the edits and response
-            edits = self.coder.get_edits()
+            edits = self.coder.get_edits() or []
             
             # Clean and format the response text
             response_text = self.clean_text(self.coder.partial_response_content or "No changes were needed.")
@@ -333,11 +356,21 @@ Please make the changes needed while following these guidelines:
                     tool_output = self.clean_text(tool_output)
                     response_text = tool_output + "\n\n" + response_text
             
+            # Process the edits to get file names
+            changed_files = []
+            for edit in edits:
+                if hasattr(edit, 'fname'):
+                    changed_files.append(edit.fname)
+                elif isinstance(edit, tuple) and len(edit) > 0:
+                    changed_files.append(str(edit[0]))
+                elif isinstance(edit, str):
+                    changed_files.append(edit)
+            
             return {
                 'success': True,
                 'edits': edits,
                 'message': response_text,
-                'files_changed': list(set(edit.fname for edit in edits)) if edits else [],
+                'files_changed': list(set(changed_files)),
                 'console_output': self.get_console_output()
             }
             
